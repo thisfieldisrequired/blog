@@ -48,12 +48,7 @@ def post_detail(request, year, month, day, post):
 
     post_tags_ids = post.tags.values_list("id", flat=True)
     simular_posts = Post.published.filter(tags__in=post_tags_ids).exclude(id=post.id)
-    # print(simular_posts)
-    # print('-------------------------------------------')
-    # try_tags = post.tags
-    # print(try_tags)
     simular_posts = simular_posts.annotate(same_tags=Count('tags')).order_by("-same_tags", "-publish")[:4]
-
     return render(request,
                   'blog/post/detail.html',
                   {'post': post,
