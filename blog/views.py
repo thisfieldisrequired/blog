@@ -1,18 +1,25 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from .models import Post, Comment
-from django.core.paginator import Paginator, EmptyPage,\
-                                  PageNotAnInteger
+from django.core.paginator import Paginator, EmptyPage, \
+    PageNotAnInteger
 from django.views.generic import ListView
 from .forms import EmailPostForm, CommentForm
 from django.core.mail import send_mail
 from django.views.decorators.http import require_POST
+from taggit.models import Tag
+from django.db.models import Count
 
 
-def post_list(request):
+def post_list(request, tag_slug=None):
     post_list = Post.published.all()
+    tag = None
+    if tag_slug:
+        tag = get_object_or_404(Tag, slug=tag_slug)
+        post_list = post_list.filter(tags__in=[tag])
     # Pagination with 3 posts per page
     paginator = Paginator(post_list, 3)
     page_number = request.GET.get('page', 1)
+
     try:
         posts = paginator.page(page_number)
     except PageNotAnInteger:
@@ -22,8 +29,9 @@ def post_list(request):
         # If page_number is out of range deliver last page of results
         posts = paginator.page(paginator.num_pages)
     return render(request,
-                 'blog/post/list.html',
-                 {'posts': posts})
+                  'blog/post/list.html',
+                  {'posts': posts,
+                   'tag': tag})
 
 
 def post_detail(request, year, month, day, post):
@@ -38,11 +46,20 @@ def post_detail(request, year, month, day, post):
     # Form for users to comment
     form = CommentForm()
 
+    post_tags_ids = post.tags.values_list("id", flat=True)
+    simular_posts = Post.published.filter(tags__in=post_tags_ids).exclude(id=post.id)
+    # print(simular_posts)
+    # print('-------------------------------------------')
+    # try_tags = post.tags
+    # print(try_tags)
+    simular_posts = simular_posts.annotate(same_tags=Count('tags')).order_by("-same_tags", "-publish")[:4]
+
     return render(request,
                   'blog/post/detail.html',
                   {'post': post,
                    'comments': comments,
-                   'form': form})
+                   'form': form,
+                   'simular_posts': simular_posts})
 
 
 class PostListView(ListView):
@@ -53,12 +70,13 @@ class PostListView(ListView):
     context_object_name = 'posts'
     paginate_by = 3
     template_name = 'blog/post/list.html'
+    ordering = ['id']
 
 
 def post_share(request, post_id):
     # Retrieve post by id
     post = get_object_or_404(Post, id=post_id, \
-                                   status=Post.Status.PUBLISHED)
+                             status=Post.Status.PUBLISHED)
     sent = False
 
     if request.method == 'POST':
@@ -86,7 +104,7 @@ def post_share(request, post_id):
 @require_POST
 def post_comment(request, post_id):
     post = get_object_or_404(Post, id=post_id, \
-                                   status=Post.Status.PUBLISHED)
+                             status=Post.Status.PUBLISHED)
     comment = None
     # A comment was posted
     form = CommentForm(data=request.POST)
@@ -98,6 +116,6 @@ def post_comment(request, post_id):
         # Save the comment to the database
         comment.save()
     return render(request, 'blog/post/comment.html',
-                           {'post': post,
-                            'form': form,
-                            'comment': comment})
+                  {'post': post,
+                   'form': form,
+                   'comment': comment})
