@@ -9,6 +9,7 @@ readme = "README.md"
 python = "^3.11"
 django = "^4.2"
 django-taggit = "3.0.0"
+markdown = "3.4.1"
 
 
 [build-system]
